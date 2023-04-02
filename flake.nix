@@ -16,6 +16,7 @@
           hlint
           cabal2nix
           haskellPackages.implicit-hie
+          xxd # because we are 1337 binary haxxorz
         ];
       };
     };

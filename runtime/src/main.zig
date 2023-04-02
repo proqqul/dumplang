@@ -1,24 +1,55 @@
 const std = @import("std");
 
+const Instruction = struct {
+    tag: u64,
+    payload: u64
+};
+
+const PROG_SIZE = 1000;
+const PROG_BYTES = PROG_SIZE * @sizeOf(Instruction);
+const STACK_SIZE = 1000;
+
 pub fn main() !void {
-    // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
-    std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
+    const file = try std.fs.cwd().openFile("out.bin", .{});
 
-    // stdout is for the actual output of your application, for example if you
-    // are implementing gzip, then only the compressed bytes should be sent to
-    // stdout, not any debugging messages.
-    const stdout_file = std.io.getStdOut().writer();
-    var bw = std.io.bufferedWriter(stdout_file);
-    const stdout = bw.writer();
+    defer file.close();
 
-    try stdout.print("Run `zig build test` to run the tests.\n", .{});
-
-    try bw.flush(); // don't forget to flush!
+    var input: [PROG_SIZE]Instruction = undefined;
+    try file.seekTo(0);
+    const n = try file.readAll(@ptrCast(*[PROG_BYTES]u8, &input));
+    const n_inst = n / @sizeOf(Instruction);
+    std.debug.print("{any}\n", .{input[0..n_inst]});
+    var res = run(input[0..n_inst]);
+    std.debug.print("{any}\n", .{res});
 }
 
-test "simple test" {
-    var list = std.ArrayList(i32).init(std.testing.allocator);
-    defer list.deinit(); // try commenting this out and see if zig detects the memory leak!
-    try list.append(42);
-    try std.testing.expectEqual(@as(i32, 42), list.pop());
+fn run(prog: []Instruction) u64 {
+    var stack: [STACK_SIZE]u64 = undefined;
+    var stack_ptr: [*]u64 = &stack;
+    for (prog) |inst| {
+        switch (inst.tag) {
+            0 => {
+                stack_ptr[0] = inst.payload;
+                stack_ptr += 1;
+            },
+            1 => { 
+                stack_ptr -= 1;
+                var x = stack_ptr[0];
+                stack_ptr -= 1;
+                var y = stack_ptr[0];
+                stack_ptr[0] = x + y;
+                stack_ptr += 1;
+            },
+            2 => { 
+                stack_ptr -= 1;
+                var x = stack_ptr[0];
+                stack_ptr -= 1;
+                var y = stack_ptr[0];
+                stack_ptr[0]= x * y;
+                stack_ptr += 1;
+            },
+            else => { std.debug.print("error unimplemented opcode: {any}\n", .{inst.tag}); }
+        }
+    }
+    return stack[0];
 }

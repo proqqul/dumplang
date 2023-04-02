@@ -7,3 +7,4 @@ zig-out/
 /build-*/
 /docgen_tmp/
 /compiler/dist-newstyle/
+out.bin
