@@ -4,8 +4,19 @@
       system = "x86_64-linux";
       pkgs = import nixpkgs { inherit system; };
     in {
-      devShells.${system}.default = pkgs.mkShell {
-        buildInputs = with pkgs; [ zig zls ];
+      devShells.${system}.default = pkgs.haskellPackages.shellFor {
+        packages = hpkgs: [
+          (hpkgs.callCabal2nix "dumplang" ./compiler {})
+        ];
+        nativeBuildInputs = with pkgs; [
+          zig
+          zls
+          cabal-install
+          haskell-language-server
+          hlint
+          cabal2nix
+          haskellPackages.implicit-hie
+        ];
       };
     };
 }
