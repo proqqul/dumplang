@@ -1,9 +1,6 @@
 const std = @import("std");
 
-const Instruction = struct {
-    tag: u64,
-    payload: u64
-};
+const Instruction = packed struct { tag: u64, payload: u64 };
 
 const PROG_SIZE = 1000;
 const PROG_BYTES = PROG_SIZE * @sizeOf(Instruction);
@@ -23,33 +20,34 @@ pub fn main() !void {
     std.debug.print("{any}\n", .{res});
 }
 
-fn run(prog: []Instruction) u64 {
+const RunError = error{ UnknownInstruction, StackUnderflow, StackLeftOver };
+
+fn run(prog: []const Instruction) RunError!u64 {
     var stack: [STACK_SIZE]u64 = undefined;
-    var stack_ptr: [*]u64 = &stack;
+    var sptr: usize = 0;
     for (prog) |inst| {
         switch (inst.tag) {
             0 => {
-                stack_ptr[0] = inst.payload;
-                stack_ptr += 1;
+                stack[sptr] = inst.payload;
+                sptr += 1;
             },
-            1 => { 
-                stack_ptr -= 1;
-                var x = stack_ptr[0];
-                stack_ptr -= 1;
-                var y = stack_ptr[0];
-                stack_ptr[0] = x + y;
-                stack_ptr += 1;
+            1 => {
+                if (sptr < 2) return RunError.StackUnderflow;
+                stack[sptr - 2] = stack[sptr - 2] + stack[sptr - 1];
+                sptr -= 1;
             },
-            2 => { 
-                stack_ptr -= 1;
-                var x = stack_ptr[0];
-                stack_ptr -= 1;
-                var y = stack_ptr[0];
-                stack_ptr[0]= x * y;
-                stack_ptr += 1;
+            2 => {
+                if (sptr < 2) return RunError.StackUnderflow;
+                stack[sptr - 2] = stack[sptr - 2] * stack[sptr - 1];
+                sptr -= 1;
             },
-            else => { std.debug.print("error unimplemented opcode: {any}\n", .{inst.tag}); }
+            else => {
+                std.debug.print("unknown instruction: {}", .{inst.tag});
+                return RunError.UnknownInstruction;
+            },
         }
     }
+    if (sptr == 0) return RunError.StackUnderflow;
+    if (sptr > 1) return RunError.StackLeftOver;
     return stack[0];
 }
