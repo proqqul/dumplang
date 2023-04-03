@@ -40,22 +40,13 @@ pub fn main() !void {
 
 const RunError = error{ UnknownInstruction, StackUnderflow, StackLeftOver, TypeError };
 
-fn opNums(comptime op: fn (u32, u32) u32, x: Value, y: Value) error{TypeError}!Value {
-    if (x.tag != .vnum or y.tag != .vnum) {
-        return error.TypeError;
+fn typeCheck(stack: []Value, args: []const ValTag) RunError!void {
+    if (stack.len < args.len) return RunError.StackUnderflow;
+    for (args, 0..) |tag, i| {
+        if (stack[stack.len - i].tag != tag) {
+            return RunError.TypeError;
+        }
     }
-    return .{
-        .tag = .vnum,
-        .val = op(x.val, y.val),
-    };
-}
-
-fn _add(x: u32, y: u32) u32 {
-    return x + y;
-}
-
-fn _mul(x: u32, y: u32) u32 {
-    return x * y;
 }
 
 fn run(prog: []const Instruction) RunError!Value {
@@ -70,14 +61,20 @@ fn run(prog: []const Instruction) RunError!Value {
                 sptr += 1;
             },
             .add => {
-                if (sptr < 2) return RunError.StackUnderflow;
-                stack[sptr - 2] = try opNums(_add, stack[sptr - 2], stack[sptr - 1]);
-                sptr -= 1;
+                try typeCheck(stack[0..sptr], &[_]ValTag{ .vnum, .vnum });
+                stack[sptr - 2] = Value{
+                    .val = stack[sptr - 2].val + stack[sptr - 1].val,
+                    .tag = .vnum,
+                };
+                sptr -= 1; // pop 2 push 1
             },
             .mul => {
-                if (sptr < 2) return RunError.StackUnderflow;
-                stack[sptr - 2] = try opNums(_mul, stack[sptr - 2], stack[sptr - 1]);
-                sptr -= 1;
+                try typeCheck(stack[0..sptr], &[_]ValTag{ .vnum, .vnum });
+                stack[sptr - 2] = Value{
+                    .val = stack[sptr - 2].val * stack[sptr - 1].val,
+                    .tag = .vnum,
+                };
+                sptr -= 1; // pop 2 push 1
             },
             .jump => {
                 iptr += inst.val.jump;
@@ -88,13 +85,13 @@ fn run(prog: []const Instruction) RunError!Value {
                 if (stack[sptr].val != 0) iptr += inst.val.jump_if;
             },
             .cmp => {
-                if (sptr < 2) return RunError.StackUnderflow;
+                try typeCheck(stack[0..sptr], &[_]ValTag{ .vnum, .vnum });
                 stack[sptr - 2] = Value{
                     // order matters <.<
                     .val = @boolToInt(std.meta.eql(stack[sptr - 2], stack[sptr - 1])),
                     .tag = .vbool,
                 };
-                sptr -= 1;
+                sptr -= 1; // pop 2 push 1
             },
             _ => {
                 std.debug.print("unknown instruction: {}\n", .{inst.tag});
