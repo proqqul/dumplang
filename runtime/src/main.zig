@@ -42,14 +42,18 @@ pub fn main() !void {
 
 const RunError = error{ UnknownInstruction, StackUnderflow, StackLeftOver, TypeError };
 
-// fn typeCheck(stack: []Value, args: []const ValTag) RunError!void {
-//     if (stack.len < args.len) return RunError.StackUnderflow;
-//     for (args, 0..) |tag, i| {
-//         if (stack[stack.len - i].tag != tag) {
-//             return RunError.TypeError;
-//         }
-//     }
-// }
+fn NTuple(comptime N: comptime_int, comptime t: type) type {
+    const foo = &[_]type{t} ** N;
+    return std.meta.Tuple(foo);
+}
+
+fn typeCheck(stack: []Value, comptime types: []const ValTag, args: NTuple(types.len, u32)) RunError!void {
+    inline for (types, args) |t, a| {
+        if (stack[a].tag != t) {
+            return RunError.TypeError;
+        }
+    }
+}
 
 fn run(prog: []const Instruction) RunError![]Value {
     var stack: [STACK_SIZE]Value = undefined;
@@ -63,7 +67,7 @@ fn run(prog: []const Instruction) RunError![]Value {
                 sptr += 1;
             },
             .add => {
-                // try typeCheck(stack[0..sptr], &[_]ValTag{ .vnum, .vnum });
+                try typeCheck(&stack, &[_]ValTag{ .vnum, .vnum }, inst.val.add);
                 stack[sptr] = Value{
                     .val = stack[inst.val.add.@"0"].val + stack[inst.val.add.@"1"].val,
                     .tag = .vnum,
@@ -71,9 +75,9 @@ fn run(prog: []const Instruction) RunError![]Value {
                 sptr += 1;
             },
             .mul => {
-                // try typeCheck(stack[0..sptr], &[_]ValTag{ .vnum, .vnum });
+                try typeCheck(&stack, &[_]ValTag{ .vnum, .vnum }, inst.val.mul);
                 stack[sptr] = Value{
-                    .val = stack[inst.val.add.@"0"].val * stack[inst.val.add.@"1"].val,
+                    .val = stack[inst.val.mul.@"0"].val * stack[inst.val.mul.@"1"].val,
                     .tag = .vnum,
                 };
                 sptr += 1;
@@ -86,7 +90,7 @@ fn run(prog: []const Instruction) RunError![]Value {
                 if (stack[inst.val.jump_if.comp_addr].val != 0) iptr += inst.val.jump_if.jump_by;
             },
             .cmp => {
-                // try typeCheck(stack[0..sptr], &[_]ValTag{ .vnum, .vnum });
+                try typeCheck(&stack, &[_]ValTag{ .vnum, .vnum }, inst.val.cmp);
                 stack[sptr] = Value{
                     // order matters <.<
                     .val = @boolToInt(std.meta.eql(stack[inst.val.cmp.@"0"], stack[inst.val.cmp.@"1"])),
