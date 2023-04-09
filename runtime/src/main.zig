@@ -13,13 +13,13 @@ const Instruction = packed struct {
     tag: InstTag,
     val: packed union {
         push: Value,
-        add: packed struct{u32, u32},
-        mul: packed struct{u32, u32},
-        jump: packed struct{jump_by: u32, padding: u32},
-        jump_if: packed struct{jump_by: u32, comp_addr: u32},
-        cmp: packed struct{u32, u32},
-        copy: packed struct{addr: u32, padding: u32},
-        trunc_stack: packed struct{addr: u32, padding: u32},
+        add: packed struct { u32, u32 },
+        mul: packed struct { u32, u32 },
+        jump: packed struct { jump_by: u32, padding: u32 },
+        jump_if: packed struct { jump_by: u32, comp_addr: u32 },
+        cmp: packed struct { u32, u32 },
+        copy: packed struct { addr: u32, padding: u32 },
+        trunc_stack: packed struct { addr: u32, padding: u32 },
     },
 };
 
@@ -51,7 +51,7 @@ const RunError = error{ UnknownInstruction, StackUnderflow, StackLeftOver, TypeE
 //     }
 // }
 
-fn run(prog: []const Instruction) RunError!Value {
+fn run(prog: []const Instruction) RunError![]Value {
     var stack: [STACK_SIZE]Value = undefined;
     var sptr: usize = 0;
     var iptr: usize = 0;
@@ -65,35 +65,41 @@ fn run(prog: []const Instruction) RunError!Value {
             .add => {
                 // try typeCheck(stack[0..sptr], &[_]ValTag{ .vnum, .vnum });
                 stack[sptr] = Value{
-                    .val = stack[inst.add.@"0"].val + stack[inst.add.@"1"].val,
+                    .val = stack[inst.val.add.@"0"].val + stack[inst.val.add.@"1"].val,
                     .tag = .vnum,
                 };
                 sptr += 1;
             },
             .mul => {
                 // try typeCheck(stack[0..sptr], &[_]ValTag{ .vnum, .vnum });
-                stack[sptr - 2] = Value{
-                    .val = stack[sptr - 2].val * stack[sptr - 1].val,
+                stack[sptr] = Value{
+                    .val = stack[inst.val.add.@"0"].val * stack[inst.val.add.@"1"].val,
                     .tag = .vnum,
                 };
-                sptr -= 1; // pop 2 push 1
+                sptr += 1;
             },
             .jump => {
-                iptr += inst.val.jump;
+                iptr += inst.val.jump.jump_by;
             },
             .jump_if => {
-                sptr -= 1;
-                if (stack[sptr].tag != .vbool) return RunError.TypeError;
-                if (stack[sptr].val != 0) iptr += inst.val.jump_if;
+                if (stack[inst.val.jump_if.comp_addr].tag != .vbool) return RunError.TypeError;
+                if (stack[inst.val.jump_if.comp_addr].val != 0) iptr += inst.val.jump_if.jump_by;
             },
             .cmp => {
                 // try typeCheck(stack[0..sptr], &[_]ValTag{ .vnum, .vnum });
-                stack[sptr - 2] = Value{
+                stack[sptr] = Value{
                     // order matters <.<
-                    .val = @boolToInt(std.meta.eql(stack[sptr - 2], stack[sptr - 1])),
+                    .val = @boolToInt(std.meta.eql(stack[inst.val.cmp.@"0"], stack[inst.val.cmp.@"1"])),
                     .tag = .vbool,
                 };
-                sptr -= 1; // pop 2 push 1
+                sptr += 1;
+            },
+            .copy => {
+                stack[sptr] = stack[inst.val.copy.addr];
+                sptr += 1;
+            },
+            .trunc_stack => {
+                sptr = inst.val.trunc_stack.addr;
             },
             _ => {
                 std.debug.print("unknown instruction: {}\n", .{inst.tag});
@@ -102,6 +108,7 @@ fn run(prog: []const Instruction) RunError!Value {
         }
     }
     if (sptr == 0) return RunError.StackUnderflow;
-    if (sptr > 1) return RunError.StackLeftOver;
-    return stack[0];
+    // if (sptr > 1) return RunError.StackLeftOver;
+    // FIXME: returning stack-allocated value (¬‿¬)
+    return stack[0..sptr];
 }
