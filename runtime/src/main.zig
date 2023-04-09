@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const InstTag = enum(u64) { push, add, mul, jump, jump_if, cmp, _ };
+const InstTag = enum(u64) { push, add, mul, jump, jump_if, cmp, copy, trunc_stack, _ };
 
 const ValTag = enum(u32) { vnum, vbool, _ };
 
@@ -13,11 +13,13 @@ const Instruction = packed struct {
     tag: InstTag,
     val: packed union {
         push: Value,
-        add: void,
-        mul: void,
-        jump: u64,
-        jump_if: u64,
-        cmp: void,
+        add: packed struct{u32, u32},
+        mul: packed struct{u32, u32},
+        jump: packed struct{jump_by: u32, padding: u32},
+        jump_if: packed struct{jump_by: u32, comp_addr: u32},
+        cmp: packed struct{u32, u32},
+        copy: packed struct{addr: u32, padding: u32},
+        trunc_stack: packed struct{addr: u32, padding: u32},
     },
 };
 
@@ -40,14 +42,14 @@ pub fn main() !void {
 
 const RunError = error{ UnknownInstruction, StackUnderflow, StackLeftOver, TypeError };
 
-fn typeCheck(stack: []Value, args: []const ValTag) RunError!void {
-    if (stack.len < args.len) return RunError.StackUnderflow;
-    for (args, 0..) |tag, i| {
-        if (stack[stack.len - i].tag != tag) {
-            return RunError.TypeError;
-        }
-    }
-}
+// fn typeCheck(stack: []Value, args: []const ValTag) RunError!void {
+//     if (stack.len < args.len) return RunError.StackUnderflow;
+//     for (args, 0..) |tag, i| {
+//         if (stack[stack.len - i].tag != tag) {
+//             return RunError.TypeError;
+//         }
+//     }
+// }
 
 fn run(prog: []const Instruction) RunError!Value {
     var stack: [STACK_SIZE]Value = undefined;
@@ -61,15 +63,15 @@ fn run(prog: []const Instruction) RunError!Value {
                 sptr += 1;
             },
             .add => {
-                try typeCheck(stack[0..sptr], &[_]ValTag{ .vnum, .vnum });
-                stack[sptr - 2] = Value{
-                    .val = stack[sptr - 2].val + stack[sptr - 1].val,
+                // try typeCheck(stack[0..sptr], &[_]ValTag{ .vnum, .vnum });
+                stack[sptr] = Value{
+                    .val = stack[inst.add.@"0"].val + stack[inst.add.@"1"].val,
                     .tag = .vnum,
                 };
-                sptr -= 1; // pop 2 push 1
+                sptr += 1;
             },
             .mul => {
-                try typeCheck(stack[0..sptr], &[_]ValTag{ .vnum, .vnum });
+                // try typeCheck(stack[0..sptr], &[_]ValTag{ .vnum, .vnum });
                 stack[sptr - 2] = Value{
                     .val = stack[sptr - 2].val * stack[sptr - 1].val,
                     .tag = .vnum,
@@ -85,7 +87,7 @@ fn run(prog: []const Instruction) RunError!Value {
                 if (stack[sptr].val != 0) iptr += inst.val.jump_if;
             },
             .cmp => {
-                try typeCheck(stack[0..sptr], &[_]ValTag{ .vnum, .vnum });
+                // try typeCheck(stack[0..sptr], &[_]ValTag{ .vnum, .vnum });
                 stack[sptr - 2] = Value{
                     // order matters <.<
                     .val = @boolToInt(std.meta.eql(stack[sptr - 2], stack[sptr - 1])),
