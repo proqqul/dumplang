@@ -48,5 +48,10 @@ end
 
 ## Session 3
 
-- [ ] let blocks
+- [x] let blocks
+- [ ] procedures
+
+## Session 4
+
+- [ ] clean up let blocks
 - [ ] procedures
