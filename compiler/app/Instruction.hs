@@ -25,38 +25,50 @@ data Instruction = Push Lit
 -- Value: The address of the return value of the Instruction compiled
 type Compile a = RWS [Address] [Instruction] Address a
 
-  -- as if we executed it, but don't actually write them to the Writer or modify the State
-asIf :: Core.T -> Compile (Address, [Instruction])
-asIf c = do
-  state <- get
-  ret <- censor (const []) . listen . compile $ c
-  put state
-  pure ret
-
-pushOne :: Instruction -> Compile Address
-pushOne inst = do
-  tell [inst]
-  a <- get
-  modify (+1)
-  pure a
-
-compile :: Core.T -> Compile Address
-compile (C.Scope c) = do
+scope :: Compile Address -> Compile Address
+scope m = do
   startAddr <- get
-  retAddr <- compile c
+  retAddr <- m
   put startAddr
   tell [ TruncStack startAddr
        , Copy retAddr ]
   modify (+1)
   pure startAddr
-compile (C.Lit l) = pushOne (Push l)
-compile (C.App Plus x y) = (Add <$> compile x <*> compile y) >>= pushOne
-compile (C.App Times x y) = (Mul <$> compile x <*> compile y) >>= pushOne
-compile (C.App Equal x y) = (Cmp <$> compile x <*> compile y) >>= pushOne
-compile (C.If b e1 e2) = do
+
+  -- as if we executed it, but don't actually write them to the Writer or modify the State
+asIf :: Compile Address -> Compile (Address, [Instruction])
+asIf m = do
+  state <- get
+  ret <- censor (const []) . listen $ m
+  put state
+  pure ret
+
+pushOne :: Compile Address
+pushOne = do
+  a <- get
+  modify (+1)
+  pure a
+
+compile :: Core.T -> Compile Address
+compile (C.Lit l) = do
+  tell [Push l]
+  pushOne
+compile (C.App Plus x y) = scope $ do
+  inst <- Add <$> compile x <*> compile y
+  tell [inst]
+  pushOne
+compile (C.App Times x y) = scope $ do
+  inst <- Mul <$> compile x <*> compile y
+  tell [inst]
+  pushOne
+compile (C.App Equal x y) = scope $ do
+  inst <- Cmp <$> compile x <*> compile y
+  tell [inst]
+  pushOne
+compile (C.If b e1 e2) = scope $ do
   b' <- compile b
-  (_, e1_is) <- asIf $ C.Scope e1
-  (_, e2_is) <- asIf $ C.Scope e2
+  (_, e1_is) <- asIf . scope $ compile e1
+  (_, e2_is) <- asIf . scope $ compile e2
 
   -- more like an unless (reverse order from if)
   -- +1 is for the Jump
@@ -66,14 +78,12 @@ compile (C.If b e1 e2) = do
     ++ e1_is)
 
   -- we never actually ran e1 or e2, but one of them is going to actually put something on the stack
-  a <- get
-  modify (+1)
-  pure a
+  pushOne
 compile (C.Var (C.Id i)) = do
   addrs <- ask
   let (Just addr) = addrs !!? i
   pure addr
-compile (C.Let cs c) = do
+compile (C.Let cs c) = scope $ do
   addrs <- mapM compile cs
   local (reverse addrs ++) $ compile c
 
