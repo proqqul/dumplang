@@ -13,6 +13,7 @@ data T = App BinOp T T
        | If T T T
        | Var Id
        | Let [T] T
+       | Scope T
   deriving (Eq, Show)
 
 
@@ -20,14 +21,14 @@ fromExpr :: Expr.T -> T
 fromExpr e = runReader (helper e) []
   where
     helper :: Expr.T -> Reader [E.Var] T
-    helper (E.App b e1 e2) = App b <$> (helper e1) <*> (helper e2)
+    helper (E.App b e1 e2) = Scope <$> (App b <$> (helper e1) <*> (helper e2))
     helper (E.Lit l) = pure $ Lit l
-    helper (E.If e1 e2 e3) = If <$> (helper e1) <*> (helper e2) <*> (helper e3)
+    helper (E.If e1 e2 e3) = Scope <$> (If <$> (helper e1) <*> (helper e2) <*> (helper e3))
     helper (E.Var name) = do
       vars <- ask
       let (Just i) = elemIndex name vars
       return . Var . Id $ i
-    helper (E.Let bindings e) = do
+    helper (E.Let bindings e') = do
       let (newvars, bodies) = unzip bindings
       bodies' <- mapM helper bodies
-      Let bodies' <$> local (reverse newvars ++) (helper e)
+      Scope <$> (Let bodies' <$> local (reverse newvars ++) (helper e'))
