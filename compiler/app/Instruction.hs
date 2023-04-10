@@ -19,6 +19,10 @@ data Instruction = Push Lit
                  | TruncStack Address
   deriving (Eq, Show)
 
+-- Reader: List of address bound to de Bruijn indices
+-- Writer: The list of instructions to execute
+-- State: The address of the top of the stack
+-- Value: The address of the return value of the Instruction compiled
 type Compile a = RWS [Address] [Instruction] Address a
 
 pushOne :: Instruction -> Compile Address
@@ -29,16 +33,22 @@ pushOne inst = do
   pure a
 
 compile :: Core.T -> Compile Address
+compile (C.Scope c) = do
+  startAddr <- get
+  retAddr <- compile c
+  put startAddr
+  tell [ TruncStack startAddr
+       , Copy retAddr ]
+  modify (+1)
+  pure startAddr
 compile (C.Lit l) = pushOne (Push l)
-compile (C.App Plus x y) = do
-  (Add <$> compile x <*> compile y) >>= pushOne
-compile (C.App Times x y) = do
-  (Mul <$> compile x <*> compile y) >>= pushOne
-compile (C.App Equal x y) = do
-  (Cmp <$> compile x <*> compile y) >>= pushOne
+compile (C.App Plus x y) = (Add <$> compile x <*> compile y) >>= pushOne
+compile (C.App Times x y) = (Mul <$> compile x <*> compile y) >>= pushOne
+compile (C.App Equal x y) = (Cmp <$> compile x <*> compile y) >>= pushOne
 compile (C.If b e1 e2) = do
   b' <- compile b
   startAddr <- get
+  -- instructions as if we executed it, but don't actually write them to the Writer
   (e1', e1_is) <- censor (const []) $ listen $ compile e1
   put startAddr
   (e2', e2_is) <- censor (const []) $ listen $ compile e2

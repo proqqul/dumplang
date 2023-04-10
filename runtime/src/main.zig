@@ -55,7 +55,7 @@ fn typeCheck(stack: []Value, comptime types: []const ValTag, args: NTuple(types.
     }
 }
 
-fn run(prog: []const Instruction) RunError![]Value {
+fn run(prog: []const Instruction) RunError!Value {
     var stack: [STACK_SIZE]Value = undefined;
     var sptr: usize = 0;
     var iptr: usize = 0;
@@ -112,7 +112,7 @@ fn run(prog: []const Instruction) RunError![]Value {
         }
     }
     if (sptr == 0) return RunError.StackUnderflow;
-    // if (sptr > 1) return RunError.StackLeftOver;
+    if (sptr > 1) return RunError.StackLeftOver;
     // FIXME: returning stack-allocated value (¬‿¬)
-    return stack[0..sptr];
+    return stack[0];
 }
