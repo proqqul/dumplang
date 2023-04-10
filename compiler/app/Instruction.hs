@@ -25,6 +25,14 @@ data Instruction = Push Lit
 -- Value: The address of the return value of the Instruction compiled
 type Compile a = RWS [Address] [Instruction] Address a
 
+  -- as if we executed it, but don't actually write them to the Writer or modify the State
+asIf :: Core.T -> Compile (Address, [Instruction])
+asIf c = do
+  state <- get
+  ret <- censor (const []) . listen . compile $ c
+  put state
+  pure ret
+
 pushOne :: Instruction -> Compile Address
 pushOne inst = do
   tell [inst]
@@ -47,24 +55,20 @@ compile (C.App Times x y) = (Mul <$> compile x <*> compile y) >>= pushOne
 compile (C.App Equal x y) = (Cmp <$> compile x <*> compile y) >>= pushOne
 compile (C.If b e1 e2) = do
   b' <- compile b
-  startAddr <- get
-  -- instructions as if we executed it, but don't actually write them to the Writer
-  (e1', e1_is) <- censor (const []) $ listen $ compile e1
-  put startAddr
-  (e2', e2_is) <- censor (const []) $ listen $ compile e2
-  put startAddr
+  (_, e1_is) <- asIf $ C.Scope e1
+  (_, e2_is) <- asIf $ C.Scope e2
 
-  tell ([JumpIf (length e2_is + 3) b']
+  -- more like an unless (reverse order from if)
+  -- +1 is for the Jump
+  tell ([JumpIf (length e2_is + 1) b']
     ++ e2_is
-    ++ [TruncStack startAddr]
-    ++ [Copy e2']
-    ++ [Jump (length e1_is + 2)]
-    ++ e1_is
-    ++ [TruncStack startAddr]
-    ++ [Copy e1'])
+    ++ [Jump (length e1_is)]
+    ++ e1_is)
 
+  -- we never actually ran e1 or e2, but one of them is going to actually put something on the stack
+  a <- get
   modify (+1)
-  pure startAddr
+  pure a
 compile (C.Var (C.Id i)) = do
   addrs <- ask
   let (Just addr) = addrs !!? i
