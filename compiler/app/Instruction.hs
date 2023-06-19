@@ -122,3 +122,6 @@ fromCore :: Core.T -> [Instruction]
 fromCore c = w
   where
     (_, _, w) = runRWS (compile c) [] 0
+
+fromProgram :: Core.Program -> [Instruction]
+fromProgram = (>>= (fromCore . Core.body))

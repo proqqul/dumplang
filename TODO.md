@@ -10,7 +10,7 @@
 - [ ] make a slightly more than minimal language
   - [ ] strings
   - [x] bools
-  - [ ] let blocks
+  - [x] let blocks
   - [ ] procedures
   - [ ] syntax
   - [ ] control flow

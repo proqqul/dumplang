@@ -15,6 +15,9 @@ data T = App BinOp T T
        | Let [T] T
   deriving (Eq, Show)
 
+data Decl = Proc { body :: T }
+
+type Program = [Decl]
 
 fromExpr :: Expr.T -> T
 fromExpr e = runReader (helper e) []
@@ -31,3 +34,9 @@ fromExpr e = runReader (helper e) []
       let (newvars, bodies) = unzip bindings
       bodies' <- mapM helper bodies
       Let bodies' <$> local (reverse newvars ++) (helper e')
+
+withMainFirst :: Expr.Program -> Expr.Program
+withMainFirst = uncurry (flip (++)) . break (\d -> Expr.name d == "main") 
+
+fromProgram :: Expr.Program -> Program
+fromProgram = (map $ \d -> Proc (fromExpr (Expr.body d))) . withMainFirst
